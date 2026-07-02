@@ -101,7 +101,11 @@ assert.match(pageSource, /function drawQuoteBlock/, "quote block rendering shoul
 assert.match(pageSource, /boxOffsetX:\s*-14,[\s\S]*?boxWidthOffset:\s*14,/, "callout quote backgrounds should align their right edge with the body text column");
 assert.match(pageSource, /boxOffsetX:\s*-12,[\s\S]*?boxWidthOffset:\s*12,/, "code quote backgrounds should align their right edge with the body text column");
 assert.match(pageSource, /boxOffsetX:\s*-18,[\s\S]*?boxWidthOffset:\s*18,/, "paper quote backgrounds should align their right edge with the body text column");
-assert.match(pageSource, /layoutPosterPages\(deferredContent, manualTitle, typographySettings, theme\)/, "pagination should account for theme-specific quote treatments");
+assert.match(pageSource, /const PREVIEW_UPDATE_DELAY_MS = 360;/, "preview updates should be delayed enough to keep typing responsive");
+assert.match(pageSource, /function useDebouncedValue<T>\(value: T, delayMs: number\)/, "preview updates should use a reusable debounce hook");
+assert.match(pageSource, /const previewInput = useMemo\(/, "preview-driving controls should be grouped into one debounced snapshot");
+assert.match(pageSource, /layoutPosterPages\(debouncedPreviewInput\.content, debouncedPreviewInput\.manualTitle, debouncedPreviewInput\.typographySettings, debouncedPreviewInput\.theme\)/, "preview pagination should use the debounced snapshot");
+assert.match(pageSource, /const exportPages = layoutPosterPages\(content, manualTitle, typographySettings, theme\);/, "export should render the latest live editor state instead of delayed preview state");
 assert.match(pageSource, /function selectThemePreset\(targetTheme: ThemeDefinition\)\s*\{\s*setThemeId\(targetTheme\.id\);\s*\}/, "theme selection should preserve manual typography adjustments");
 assert.doesNotMatch(pageSource, /function selectThemePreset\(targetTheme: ThemeDefinition\)\s*\{[\s\S]*?applyThemeEditorDefaults\(targetTheme\)/, "theme selection should not reset editor controls");
 assert.match(pageSource, /onClick=\{\(\) => selectThemePreset\(item\)\}/, "theme buttons should preserve typography while switching theme visuals");
@@ -170,7 +174,7 @@ assert.doesNotMatch(pageSource, /xhs-poster-\$\{index \+ 1\}\.png/, "bulk export
 assert.match(cssSource, /\.text-area::-webkit-scrollbar \{[\s\S]*?width: 5px;/, "textarea scrollbars should use a thinner visual treatment");
 assert.match(cssSource, /\.info-icon \{[\s\S]*?display: block;/, "inline SVG info icon should be block-level for stable centering");
 assert.doesNotMatch(pageSource, /preview-action-bar|preview-action-kicker/, "bottom export action bar should be removed");
-assert.match(pageSource, /borderRadius: cardCornerMode === "rounded" \? 12 : 0/, "preview card radius should use the medium radius level");
+assert.match(pageSource, /borderRadius: debouncedPreviewInput\.cardCornerMode === "rounded" \? 12 : 0/, "preview card radius should use the delayed preview snapshot and medium radius level");
 assert.match(cssSource, /\.hero-card,[\s\S]*?border-radius: 20px;/, "large surfaces should use tighter 20px radius");
 assert.match(cssSource, /--accent:\s*#24211d;/, "outer UI accent should use warm charcoal instead of SaaS blue");
 assert.match(cssSource, /--surface-shadow:\s*rgba\(36, 32, 28, 0\.08\);/, "outer UI shadows should use warm charcoal instead of cold blue-gray");

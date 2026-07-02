@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 type ThemeDefinition = {
   id: string;
@@ -562,6 +562,7 @@ const BODY_TEXT_WEIGHT = 300;
 const BODY_BOLD_WEIGHT = 400;
 const QUOTE_TEXT_WEIGHT = 400;
 const SUBHEADING_TEXT_WEIGHT = 600;
+const PREVIEW_UPDATE_DELAY_MS = 360;
 const LEADING_PUNCTUATION = new Set(Array.from("，。！？、；：）》」』】〕］〉〗’”%、,.!?;:)]}"));
 
 const TITLE_FONT_MODES: Record<
@@ -2098,6 +2099,17 @@ function createExportFileName(manualTitle: string, index: number, exportTimestam
   return `${baseName}-${pageNumber}-${exportTimestamp}.png`;
 }
 
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
+
 export default function HomePage() {
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [manualTitle, setManualTitle] = useState("");
@@ -2116,7 +2128,6 @@ export default function HomePage() {
   const [pages, setPages] = useState<PosterPage[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isExporting, startExportTransition] = useTransition();
-  const deferredContent = useDeferredValue(content);
 
   const theme = useMemo(() => THEMES.find((item) => item.id === themeId) ?? THEMES[0], [themeId]);
   const characterCount = content.replace(/\s+/g, "").length;
@@ -2131,6 +2142,22 @@ export default function HomePage() {
     () => ({ titleSize, bodySize, lineHeight, titleFontMode, subheadingStyle }),
     [titleSize, bodySize, lineHeight, titleFontMode, subheadingStyle]
   );
+  const previewInput = useMemo(
+    () => ({
+      content,
+      manualTitle,
+      theme,
+      typographySettings,
+      highlightStyle,
+      footerLeft,
+      footerRightMode,
+      footerEnabled,
+      cardCornerMode
+    }),
+    [content, manualTitle, theme, typographySettings, highlightStyle, footerLeft, footerRightMode, footerEnabled, cardCornerMode]
+  );
+  const debouncedPreviewInput = useDebouncedValue(previewInput, PREVIEW_UPDATE_DELAY_MS);
+  const isPreviewPending = previewInput !== debouncedPreviewInput;
 
   function applyThemeEditorDefaults(targetTheme: ThemeDefinition = theme) {
     setTitleSize(targetTheme.editor.titleSize);
@@ -2150,8 +2177,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    setPages(layoutPosterPages(deferredContent, manualTitle, typographySettings, theme));
-  }, [deferredContent, manualTitle, typographySettings, theme]);
+    setPages(layoutPosterPages(debouncedPreviewInput.content, debouncedPreviewInput.manualTitle, debouncedPreviewInput.typographySettings, debouncedPreviewInput.theme));
+  }, [debouncedPreviewInput]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2164,15 +2191,15 @@ export default function HomePage() {
       for (let index = 0; index < pages.length; index += 1) {
         const dataUrl = await renderPosterToDataUrl(
           pages[index],
-          theme,
-          typographySettings,
-          highlightStyle,
+          debouncedPreviewInput.theme,
+          debouncedPreviewInput.typographySettings,
+          debouncedPreviewInput.highlightStyle,
           index,
           pages.length,
-          footerLeft,
-          footerRightMode,
-          footerEnabled,
-          cardCornerMode
+          debouncedPreviewInput.footerLeft,
+          debouncedPreviewInput.footerRightMode,
+          debouncedPreviewInput.footerEnabled,
+          debouncedPreviewInput.cardCornerMode
         );
         urls.push(dataUrl);
       }
@@ -2182,19 +2209,20 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [pages, theme, typographySettings, highlightStyle, footerLeft, footerRightMode, footerEnabled, cardCornerMode]);
+  }, [pages, debouncedPreviewInput]);
 
   async function handleExportAll() {
     startExportTransition(async () => {
       const exportTimestamp = getExportTimestamp();
-      for (let index = 0; index < pages.length; index += 1) {
+      const exportPages = layoutPosterPages(content, manualTitle, typographySettings, theme);
+      for (let index = 0; index < exportPages.length; index += 1) {
         const dataUrl = await renderPosterToDataUrl(
-          pages[index],
+          exportPages[index],
           theme,
           typographySettings,
           highlightStyle,
           index,
-          pages.length,
+          exportPages.length,
           footerLeft,
           footerRightMode,
           footerEnabled,
@@ -2465,7 +2493,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="preview-head-actions">
-              <span className="preview-note">所见即所得，3:4 双倍高清 PNG</span>
+              <span className="preview-note">{isPreviewPending ? "输入停顿后更新预览" : "所见即所得，3:4 双倍高清 PNG"}</span>
               <span className="export-help">
                 <button type="button" className="info-button" aria-label="查看导出说明">
                   <svg className="info-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2488,10 +2516,10 @@ export default function HomePage() {
                 <div
                   className="poster-preview-stage"
                   style={{
-                    borderRadius: cardCornerMode === "rounded" ? 12 : 0,
-                    boxShadow: theme.surface.previewShadow,
-                    borderColor: theme.palette.border,
-                    background: theme.palette.pageAlt
+                    borderRadius: debouncedPreviewInput.cardCornerMode === "rounded" ? 12 : 0,
+                    boxShadow: debouncedPreviewInput.theme.surface.previewShadow,
+                    borderColor: debouncedPreviewInput.theme.palette.border,
+                    background: debouncedPreviewInput.theme.palette.pageAlt
                   }}
                 >
                   {previewUrls[index] ? (
