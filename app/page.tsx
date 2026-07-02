@@ -554,6 +554,8 @@ const FOOTER_LINE_LEFT = 108;
 const FOOTER_LINE_RIGHT = 612;
 const FOOTER_LINE_Y = 850;
 const FOOTER_TEXT_Y = 890;
+const BODY_BOTTOM_WITH_FOOTER = 818;
+const BODY_BOTTOM_WITHOUT_FOOTER = FOOTER_TEXT_Y;
 const TITLE_FONT_FAMILY = "'Source Han Serif SC Heavy','Source Han Serif SC','Noto Serif CJK SC','Songti SC','STSong',serif";
 const RETRO_SERIF_FONT_FAMILY = "'FZYaSongS-B-GB','FZYaSong-M-GBK','HYDaSongJ','Source Han Serif SC Heavy','Source Han Serif SC','Songti SC','STSong',serif";
 const BODY_FONT_FAMILY = "'PingFang SC','Hiragino Sans GB','Noto Sans SC',sans-serif";
@@ -1188,7 +1190,7 @@ function fitTitleLines(title: string, settings: TypographySettings) {
   };
 }
 
-function getPosterMetrics(page: PosterPage, settings: TypographySettings): PosterMetrics {
+function getPosterMetrics(page: PosterPage, settings: TypographySettings, footerEnabled: boolean): PosterMetrics {
   const bodySize = Math.max(21, settings.bodySize - 4);
   const bodyLineHeight = bodySize * Math.max(1.58, settings.lineHeight - 0.06);
   const bodyParagraphGap = Math.max(30, bodySize * 1.25);
@@ -1199,7 +1201,7 @@ function getPosterMetrics(page: PosterPage, settings: TypographySettings): Poste
   const titleStartY = 218;
   const separatorY = titleBlock ? bodyAnchorTitleStartY + titleBlock.titleLines.length * titleBlock.titleLineHeight - 18 : 110;
   const bodyTopY = separatorY + (titleBlock ? 0 : 10);
-  const bodyBottomY = 818;
+  const bodyBottomY = footerEnabled ? BODY_BOTTOM_WITH_FOOTER : BODY_BOTTOM_WITHOUT_FOOTER;
   return {
     titleSize: titleBlock?.titleSize ?? settings.titleSize,
     titleLineHeight: titleBlock?.titleLineHeight ?? settings.titleSize * titleLineHeightRatio,
@@ -1572,7 +1574,7 @@ function drawInlineParagraph(
   return lines.length;
 }
 
-function layoutPosterPages(raw: string, manualTitle: string, settings: TypographySettings, theme: ThemeDefinition) {
+function layoutPosterPages(raw: string, manualTitle: string, settings: TypographySettings, theme: ThemeDefinition, footerEnabled: boolean) {
   const parsed = parseInput(raw);
   const title = manualTitle.trim();
   const renderableTitle = parseTitleMarkup(title).plainText.trim();
@@ -1610,7 +1612,7 @@ function layoutPosterPages(raw: string, manualTitle: string, settings: Typograph
       title: kind === "cover" ? title : "",
       paragraphs: []
     };
-    const metrics = getPosterMetrics(page, settings);
+    const metrics = getPosterMetrics(page, settings, footerEnabled);
     let cursorY = metrics.bodyTopY;
     let previousBlock: ParagraphBlock | null = null;
 
@@ -1958,7 +1960,7 @@ async function renderPosterToDataUrl(
   if (!context) throw new Error("Canvas 初始化失败。");
   context.scale(2, 2);
 
-  const metrics = getPosterMetrics(page, settings);
+  const metrics = getPosterMetrics(page, settings, footerEnabled);
   context.shadowColor = theme.palette.shadow;
   context.shadowBlur = theme.mode === "swiss" ? 18 : 40;
   context.shadowOffsetY = theme.mode === "swiss" ? 12 : 24;
@@ -2177,7 +2179,13 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    setPages(layoutPosterPages(debouncedPreviewInput.content, debouncedPreviewInput.manualTitle, debouncedPreviewInput.typographySettings, debouncedPreviewInput.theme));
+    setPages(layoutPosterPages(
+      debouncedPreviewInput.content,
+      debouncedPreviewInput.manualTitle,
+      debouncedPreviewInput.typographySettings,
+      debouncedPreviewInput.theme,
+      debouncedPreviewInput.footerEnabled
+    ));
   }, [debouncedPreviewInput]);
 
   useEffect(() => {
@@ -2214,7 +2222,7 @@ export default function HomePage() {
   async function handleExportAll() {
     startExportTransition(async () => {
       const exportTimestamp = getExportTimestamp();
-      const exportPages = layoutPosterPages(content, manualTitle, typographySettings, theme);
+      const exportPages = layoutPosterPages(content, manualTitle, typographySettings, theme, footerEnabled);
       for (let index = 0; index < exportPages.length; index += 1) {
         const dataUrl = await renderPosterToDataUrl(
           exportPages[index],

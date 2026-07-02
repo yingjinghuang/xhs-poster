@@ -108,8 +108,11 @@ assert.match(pageSource, /boxOffsetX:\s*-18,[\s\S]*?boxWidthOffset:\s*18,/, "pap
 assert.match(pageSource, /const PREVIEW_UPDATE_DELAY_MS = 360;/, "preview updates should be delayed enough to keep typing responsive");
 assert.match(pageSource, /function useDebouncedValue<T>\(value: T, delayMs: number\)/, "preview updates should use a reusable debounce hook");
 assert.match(pageSource, /const previewInput = useMemo\(/, "preview-driving controls should be grouped into one debounced snapshot");
-assert.match(pageSource, /layoutPosterPages\(debouncedPreviewInput\.content, debouncedPreviewInput\.manualTitle, debouncedPreviewInput\.typographySettings, debouncedPreviewInput\.theme\)/, "preview pagination should use the debounced snapshot");
-assert.match(pageSource, /const exportPages = layoutPosterPages\(content, manualTitle, typographySettings, theme\);/, "export should render the latest live editor state instead of delayed preview state");
+assert.match(pageSource, /const BODY_BOTTOM_WITH_FOOTER = 818;/, "footer-on pagination should preserve the original reserved footer area");
+assert.match(pageSource, /const BODY_BOTTOM_WITHOUT_FOOTER = FOOTER_TEXT_Y;/, "footer-off pagination should let body content extend toward the bottom frame");
+assert.match(pageSource, /bodyBottomY = footerEnabled \? BODY_BOTTOM_WITH_FOOTER : BODY_BOTTOM_WITHOUT_FOOTER/, "poster metrics should adjust body height when the footer is hidden");
+assert.match(pageSource, /layoutPosterPages\(\s*debouncedPreviewInput\.content,\s*debouncedPreviewInput\.manualTitle,\s*debouncedPreviewInput\.typographySettings,\s*debouncedPreviewInput\.theme,\s*debouncedPreviewInput\.footerEnabled\s*\)/, "preview pagination should use the debounced footer visibility snapshot");
+assert.match(pageSource, /const exportPages = layoutPosterPages\(content, manualTitle, typographySettings, theme, footerEnabled\);/, "export should render the latest live editor state instead of delayed preview state");
 assert.match(pageSource, /function selectThemePreset\(targetTheme: ThemeDefinition\)\s*\{\s*setThemeId\(targetTheme\.id\);\s*\}/, "theme selection should preserve manual typography adjustments");
 assert.doesNotMatch(pageSource, /function selectThemePreset\(targetTheme: ThemeDefinition\)\s*\{[\s\S]*?applyThemeEditorDefaults\(targetTheme\)/, "theme selection should not reset editor controls");
 assert.match(pageSource, /onClick=\{\(\) => selectThemePreset\(item\)\}/, "theme buttons should preserve typography while switching theme visuals");
