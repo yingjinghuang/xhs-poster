@@ -13,8 +13,12 @@ const launcherScriptSource = readFileSync(launcherScriptPath, "utf8");
 const match = pageSource.match(/const DEFAULT_CONTENT = `([\s\S]*?)`;/);
 
 assert.ok(match, "DEFAULT_CONTENT should be defined as a template string");
-assert.match(launcherScriptSource, /nohup npm run dev -- --port 3000/, "desktop launcher should keep the poster studio running after the launcher exits");
-assert.match(launcherScriptSource, /open "http:\/\/localhost:3000"/, "desktop launcher should open the local poster studio URL");
+assert.match(launcherScriptSource, /PORT_CANDIDATES=\(3000 3001 3002 3003 3004 3005\)/, "desktop launcher should have fallback ports when the default port is busy");
+assert.match(launcherScriptSource, /npm run build >"\$BUILD_LOG"/, "desktop launcher should build the app when the production build is missing");
+assert.match(launcherScriptSource, /nohup \.\/node_modules\/\.bin\/next start --port "\$PORT"/, "desktop launcher should keep the poster studio running on the selected port without an npm parent process");
+assert.match(launcherScriptSource, /open "http:\/\/localhost:\$\{port\}"/, "desktop launcher should open an already-running poster studio on its actual port");
+assert.match(launcherScriptSource, /open "\$URL"/, "desktop launcher should open the selected local poster studio URL");
+assert.match(launcherScriptSource, /NEXT_LOG="\/tmp\/xhs-poster-next-\$\{PORT\}\.log"/, "desktop launcher logs should identify the selected port");
 
 const defaultContent = match[1];
 const forbiddenPatterns = [
