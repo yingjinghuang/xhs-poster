@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { createStoredZip, dataUrlToBytes, downloadBlob } from "./zip";
 
 type ThemeDefinition = {
   id: string;
@@ -120,6 +121,30 @@ type QuoteBoxMetrics = {
   barWidth: number;
   barRadius: number;
 };
+
+type SavedWorkspace = {
+  content: string;
+  manualTitle: string;
+  themeId: string;
+  titleSize: number;
+  bodySize: number;
+  lineHeight: number;
+  titleFontMode: TitleFontMode;
+  subheadingStyle: SubheadingStyle;
+  highlightStyle: HighlightStyle;
+  footerEnabled: boolean;
+  footerLeft: string;
+  footerRightMode: FooterRightMode;
+  cardCornerMode: CardCornerMode;
+};
+
+type UserPreset = SavedWorkspace & {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
+type SaveState = "idle" | "saving" | "saved";
 
 const THEMES: ThemeDefinition[] = [
   {
@@ -613,6 +638,9 @@ const THEME_PRESETS = THEME_PRESET_ORDER
   .map((themeId) => THEMES.find((theme) => theme.id === themeId))
   .filter((theme): theme is ThemeDefinition => Boolean(theme));
 const DEFAULT_SUBHEADING_STYLE: SubheadingStyle = "large";
+const WORKSPACE_STORAGE_KEY = "xhs-poster.workspace.v1";
+const USER_PRESETS_STORAGE_KEY = "xhs-poster.user-presets.v1";
+const PAGE_BREAK_TOKEN = "__XHS_POSTER_PAGE_BREAK__";
 
 function getTitleFontWeight(mode: TitleFontMode) {
   if (mode === "serif") return 500;
@@ -634,8 +662,13 @@ function isMarkdownDividerLine(line: string) {
   return line.trim() === "---";
 }
 
+function isPageBreakLine(line: string) {
+  const normalized = line.trim().toLowerCase();
+  return normalized === "---page---" || normalized === "<!-- pagebreak -->";
+}
+
 function isStandaloneMarkdownBlockStart(line: string) {
-  return /^#{1,6}\s+/.test(line) || /^>\s?/.test(line) || isMarkdownDividerLine(line);
+  return /^#{1,6}\s+/.test(line) || /^>\s?/.test(line) || isMarkdownDividerLine(line) || isPageBreakLine(line);
 }
 
 function parseInput(raw: string) {
@@ -658,7 +691,11 @@ function parseInput(raw: string) {
     }
     if (isStandaloneMarkdownBlockStart(trimmed)) {
       flushCurrentBlock();
-      blocks.push(trimmed);
+      if (isPageBreakLine(trimmed)) {
+        blocks.push(PAGE_BREAK_TOKEN);
+      } else {
+        blocks.push(trimmed);
+      }
       continue;
     }
     currentBlock.push(trimmed);
@@ -1594,6 +1631,7 @@ function layoutPosterPages(raw: string, manualTitle: string, settings: Typograph
   }
 
   const expandedParagraphs = sourceParagraphs.flatMap((paragraph) => {
+    if (paragraph === PAGE_BREAK_TOKEN) return [PAGE_BREAK_TOKEN];
     const chunkSize = 180;
     const block = getParagraphBlock(paragraph);
     if (block.raw.length <= chunkSize + 40) return [paragraph];
@@ -1619,6 +1657,12 @@ function layoutPosterPages(raw: string, manualTitle: string, settings: Typograph
     while (currentParagraph < expandedParagraphs.length || carryParagraph) {
       const wasCarryingParagraph = Boolean(carryParagraph);
       const currentText = wasCarryingParagraph ? carryParagraph : expandedParagraphs[currentParagraph];
+      if (currentText === PAGE_BREAK_TOKEN) {
+        carryParagraph = "";
+        currentParagraph += 1;
+        if (page.paragraphs.length > 0) break;
+        continue;
+      }
       const block = getParagraphBlock(currentText);
       const leadingGap = getGapBetweenBlocks(previousBlock, block, metrics);
       const { lines, height } = measureParagraphBlock(block, metrics.bodySize, metrics.bodyLineHeight, metrics.bodyWidth, theme, settings.subheadingStyle);
@@ -2095,10 +2139,24 @@ function getExportTimestamp() {
   ].join("") + "-" + [pad(now.getHours()), pad(now.getMinutes()), pad(now.getSeconds())].join("");
 }
 
+function getExportBaseName(manualTitle: string) {
+  return sanitizeDownloadName(manualTitle.trim() || "XHS-Poster") || "XHS-Poster";
+}
+
 function createExportFileName(manualTitle: string, index: number, exportTimestamp: string) {
-  const baseName = sanitizeDownloadName(manualTitle.trim() || "LuKK-小红书卡片") || "LuKK-小红书卡片";
+  const baseName = getExportBaseName(manualTitle);
   const pageNumber = String(index + 1).padStart(2, "0");
   return `${baseName}-${pageNumber}-${exportTimestamp}.png`;
+}
+
+function createZipEntryName(manualTitle: string, index: number) {
+  const baseName = getExportBaseName(manualTitle);
+  const pageNumber = String(index + 1).padStart(2, "0");
+  return `${baseName}-${pageNumber}.png`;
+}
+
+function createZipFileName(manualTitle: string, exportTimestamp: string) {
+  return `${getExportBaseName(manualTitle)}-${exportTimestamp}.zip`;
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
@@ -2124,11 +2182,15 @@ export default function HomePage() {
   const [subheadingStyle, setSubheadingStyle] = useState<SubheadingStyle>(DEFAULT_SUBHEADING_STYLE);
   const [highlightStyle, setHighlightStyle] = useState<HighlightStyle>(INITIAL_THEME.editor.highlightStyle);
   const [footerEnabled, setFooterEnabled] = useState(true);
-  const [footerLeft, setFooterLeft] = useState("困困");
+  const [footerLeft, setFooterLeft] = useState("");
   const [footerRightMode, setFooterRightMode] = useState<FooterRightMode>("page");
   const [cardCornerMode, setCardCornerMode] = useState<CardCornerMode>("square");
   const [pages, setPages] = useState<PosterPage[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [userPresets, setUserPresets] = useState<UserPreset[]>([]);
+  const [presetName, setPresetName] = useState("");
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isExporting, startExportTransition] = useTransition();
 
   const theme = useMemo(() => THEMES.find((item) => item.id === themeId) ?? THEMES[0], [themeId]);
@@ -2175,8 +2237,70 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    setContent((current) => (isLegacyDefaultContent(current) ? DEFAULT_CONTENT : current));
+    try {
+      const rawWorkspace = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+      if (rawWorkspace) {
+        const stored = JSON.parse(rawWorkspace) as Partial<SavedWorkspace>;
+        if (typeof stored.content === "string") setContent(isLegacyDefaultContent(stored.content) ? DEFAULT_CONTENT : stored.content);
+        if (typeof stored.manualTitle === "string") setManualTitle(stored.manualTitle);
+        if (typeof stored.themeId === "string" && THEMES.some((item) => item.id === stored.themeId)) setThemeId(stored.themeId);
+        if (typeof stored.titleSize === "number") setTitleSize(stored.titleSize);
+        if (typeof stored.bodySize === "number") setBodySize(stored.bodySize);
+        if (typeof stored.lineHeight === "number") setLineHeight(stored.lineHeight);
+        if (stored.titleFontMode && stored.titleFontMode in TITLE_FONT_MODES) setTitleFontMode(stored.titleFontMode);
+        if (stored.subheadingStyle === "large" || stored.subheadingStyle === "accent") setSubheadingStyle(stored.subheadingStyle);
+        if (stored.highlightStyle === "underline" || stored.highlightStyle === "marker" || stored.highlightStyle === "border") setHighlightStyle(stored.highlightStyle);
+        if (typeof stored.footerEnabled === "boolean") setFooterEnabled(stored.footerEnabled);
+        if (typeof stored.footerLeft === "string") setFooterLeft(stored.footerLeft);
+        if (stored.footerRightMode === "blank" || stored.footerRightMode === "page" || stored.footerRightMode === "date") setFooterRightMode(stored.footerRightMode);
+        if (stored.cardCornerMode === "rounded" || stored.cardCornerMode === "square") setCardCornerMode(stored.cardCornerMode);
+      } else {
+        setContent((current) => (isLegacyDefaultContent(current) ? DEFAULT_CONTENT : current));
+      }
+
+      const rawPresets = window.localStorage.getItem(USER_PRESETS_STORAGE_KEY);
+      if (rawPresets) {
+        const storedPresets = JSON.parse(rawPresets);
+        if (Array.isArray(storedPresets)) {
+          setUserPresets(storedPresets.filter((item) => item && typeof item.id === "string" && typeof item.name === "string"));
+        }
+      }
+    } catch (error) {
+      console.warn("无法恢复本地草稿，将使用默认内容。", error);
+    } finally {
+      setHasHydrated(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    setSaveState("saving");
+    const timer = window.setTimeout(() => {
+      const workspace: SavedWorkspace = {
+        content,
+        manualTitle,
+        themeId,
+        titleSize,
+        bodySize,
+        lineHeight,
+        titleFontMode,
+        subheadingStyle,
+        highlightStyle,
+        footerEnabled,
+        footerLeft,
+        footerRightMode,
+        cardCornerMode
+      };
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(workspace));
+      setSaveState("saved");
+    }, 320);
+    return () => window.clearTimeout(timer);
+  }, [hasHydrated, content, manualTitle, themeId, titleSize, bodySize, lineHeight, titleFontMode, subheadingStyle, highlightStyle, footerEnabled, footerLeft, footerRightMode, cardCornerMode]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    window.localStorage.setItem(USER_PRESETS_STORAGE_KEY, JSON.stringify(userPresets));
+  }, [hasHydrated, userPresets]);
 
   useEffect(() => {
     setPages(layoutPosterPages(
@@ -2219,10 +2343,101 @@ export default function HomePage() {
     };
   }, [pages, debouncedPreviewInput]);
 
+  function clearSavedDraft() {
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    setContent(DEFAULT_CONTENT);
+    setManualTitle("");
+    setThemeId(INITIAL_THEME.id);
+    applyThemeEditorDefaults(INITIAL_THEME);
+    setFooterEnabled(true);
+    setFooterLeft("");
+    setFooterRightMode("page");
+    setCardCornerMode("square");
+    setSaveState("idle");
+  }
+
+  function saveCurrentPreset() {
+    const name = presetName.trim() || `我的预设 ${userPresets.length + 1}`;
+    const preset: UserPreset = {
+      id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `preset-${Date.now()}`,
+      name,
+      createdAt: new Date().toISOString(),
+      content: "",
+      manualTitle: "",
+      themeId,
+      titleSize,
+      bodySize,
+      lineHeight,
+      titleFontMode,
+      subheadingStyle,
+      highlightStyle,
+      footerEnabled,
+      footerLeft,
+      footerRightMode,
+      cardCornerMode
+    };
+    setUserPresets((current) => [...current, preset]);
+    setPresetName("");
+  }
+
+  function applyUserPreset(preset: UserPreset) {
+    setThemeId(THEMES.some((item) => item.id === preset.themeId) ? preset.themeId : INITIAL_THEME.id);
+    setTitleSize(preset.titleSize);
+    setBodySize(preset.bodySize);
+    setLineHeight(preset.lineHeight);
+    setTitleFontMode(preset.titleFontMode);
+    setSubheadingStyle(preset.subheadingStyle);
+    setHighlightStyle(preset.highlightStyle);
+    setFooterEnabled(preset.footerEnabled);
+    setFooterLeft(preset.footerLeft);
+    setFooterRightMode(preset.footerRightMode);
+    setCardCornerMode(preset.cardCornerMode);
+  }
+
+  function deleteUserPreset(id: string) {
+    setUserPresets((current) => current.filter((preset) => preset.id !== id));
+  }
+
+  function exportUserPresets() {
+    const blob = new Blob([JSON.stringify(userPresets, null, 2)], { type: "application/json" });
+    downloadBlob(blob, "xhs-poster-presets.json");
+  }
+
+  async function importUserPresets(file: File | undefined) {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!Array.isArray(parsed)) throw new Error("预设文件格式不正确");
+      const imported = parsed
+        .filter((item) => item && typeof item.name === "string" && typeof item.themeId === "string")
+        .map((item) => ({
+          ...item,
+          id: typeof item.id === "string" ? item.id : `preset-${Date.now()}-${Math.random()}`,
+          createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+          content: "",
+          manualTitle: ""
+        })) as UserPreset[];
+      setUserPresets((current) => {
+        const byId = new Map(current.map((item) => [item.id, item]));
+        imported.forEach((item) => byId.set(item.id, item));
+        return Array.from(byId.values());
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "无法导入预设");
+    }
+  }
+
+  function handleExportSingle(index: number) {
+    const dataUrl = previewUrls[index];
+    if (!dataUrl) return;
+    downloadDataUrl(dataUrl, createExportFileName(manualTitle, index, getExportTimestamp()));
+  }
+
   async function handleExportAll() {
     startExportTransition(async () => {
       const exportTimestamp = getExportTimestamp();
       const exportPages = layoutPosterPages(content, manualTitle, typographySettings, theme, footerEnabled);
+      const zipEntries: { name: string; data: Uint8Array }[] = [];
       for (let index = 0; index < exportPages.length; index += 1) {
         const dataUrl = await renderPosterToDataUrl(
           exportPages[index],
@@ -2236,9 +2451,12 @@ export default function HomePage() {
           footerEnabled,
           cardCornerMode
         );
-        downloadDataUrl(dataUrl, createExportFileName(manualTitle, index, exportTimestamp));
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        zipEntries.push({
+          name: createZipEntryName(manualTitle, index),
+          data: dataUrlToBytes(dataUrl)
+        });
       }
+      downloadBlob(createStoredZip(zipEntries), createZipFileName(manualTitle, exportTimestamp));
     });
   }
 
@@ -2298,6 +2516,15 @@ export default function HomePage() {
                     onChange={(event) => setContent(event.target.value)}
                     placeholder="直接贴正文内容，空行分段。"
                   />
+                  <div className="editor-helper-row">
+                    <span className="editor-hint">手动分页：单独一行输入 <code>---page---</code></span>
+                    <div className="draft-tools">
+                      <span className={`save-indicator save-indicator--${saveState}`}>
+                        {!hasHydrated ? "读取草稿..." : saveState === "saving" ? "保存中..." : saveState === "saved" ? "已自动保存" : "本地草稿"}
+                      </span>
+                      <button type="button" className="text-action-button" onClick={clearSavedDraft}>清空草稿</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2349,6 +2576,43 @@ export default function HomePage() {
                         </button>
                       );
                     })}
+                  </div>
+                </details>
+
+                <details className="accordion-section">
+                  <summary className="accordion-summary">我的预设</summary>
+                  <div className="preset-manager">
+                    <div className="preset-save-row">
+                      <input
+                        className="text-input"
+                        value={presetName}
+                        onChange={(event) => setPresetName(event.target.value)}
+                        placeholder="给当前样式起个名字"
+                      />
+                      <button type="button" className="secondary-action-button" onClick={saveCurrentPreset}>保存当前样式</button>
+                    </div>
+                    {userPresets.length > 0 ? (
+                      <div className="saved-preset-list">
+                        {userPresets.map((preset) => (
+                          <div key={preset.id} className="saved-preset-item">
+                            <button type="button" className="saved-preset-apply" onClick={() => applyUserPreset(preset)}>
+                              <strong>{preset.name}</strong>
+                              <span>{THEMES.find((item) => item.id === preset.themeId)?.name ?? "自定义样式"}</span>
+                            </button>
+                            <button type="button" className="saved-preset-delete" onClick={() => deleteUserPreset(preset.id)} aria-label={`删除${preset.name}`}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="preset-empty">把常用的主题、字号、页脚和卡片设置保存下来，下次一键恢复。</p>
+                    )}
+                    <div className="preset-transfer-row">
+                      <button type="button" className="text-action-button" onClick={exportUserPresets} disabled={userPresets.length === 0}>导出预设 JSON</button>
+                      <label className="text-action-button file-action-label">
+                        导入预设 JSON
+                        <input type="file" accept="application/json,.json" onChange={(event) => { void importUserPresets(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                      </label>
+                    </div>
                   </div>
                 </details>
 
@@ -2510,10 +2774,10 @@ export default function HomePage() {
                     <path d="M12 8h.01" />
                   </svg>
                 </button>
-                <span className="export-tooltip" role="tooltip">{pages.length} 张卡片将按当前主题批量下载。也可以右键单击单张预览图片保存。</span>
+                <span className="export-tooltip" role="tooltip">{pages.length} 张卡片会打包成一个 ZIP 下载；每张卡片下方也可以单独下载。</span>
               </span>
               <button className="primary-button preview-primary-button" onClick={() => void handleExportAll()} disabled={isExporting}>
-                {isExporting ? "导出中..." : "生成并下载"}
+                {isExporting ? "打包中..." : "下载 ZIP"}
               </button>
             </div>
           </div>
@@ -2537,8 +2801,11 @@ export default function HomePage() {
                   )}
                 </div>
                 <div className="poster-meta">
-                  <span>第 {index + 1} 页</span>
-                  <span>{page.paragraphs.length} 段</span>
+                  <div className="poster-meta-copy">
+                    <span>第 {index + 1} 页</span>
+                    <span>{page.paragraphs.length} 段</span>
+                  </div>
+                  <button type="button" className="poster-download-button" onClick={() => handleExportSingle(index)} disabled={!previewUrls[index]}>下载此页</button>
                 </div>
               </article>
             ))}
