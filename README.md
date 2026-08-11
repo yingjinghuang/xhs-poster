@@ -10,15 +10,6 @@
 
 打开网页后即可直接使用，无需安装。
 
-## 导出示例
-
-<table>
-  <tr>
-    <td><img src="docs/images/export-main-01.png" alt="导出卡片示例 1" width="360" /></td>
-    <td><img src="docs/images/export-main-02.png" alt="导出卡片示例 2" width="360" /></td>
-  </tr>
-</table>
-
 ## 主要功能
 
 - **自动分页**：根据正文长度和当前排版参数自动拆分为多张卡片。
