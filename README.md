@@ -48,26 +48,6 @@
 
 其中分割线 `---` 只负责绘制分隔元素；需要从下一张卡片开始时，请使用专门的分页标记。
 
-## 视觉主题
-
-<table>
-  <tr>
-    <td><img src="docs/images/theme-sample-01.png" alt="主题示例 1" width="220" /></td>
-    <td><img src="docs/images/theme-sample-02.png" alt="主题示例 2" width="220" /></td>
-    <td><img src="docs/images/theme-sample-03.png" alt="主题示例 3" width="220" /></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/theme-sample-04.png" alt="主题示例 4" width="220" /></td>
-    <td><img src="docs/images/theme-sample-05.png" alt="主题示例 5" width="220" /></td>
-    <td><img src="docs/images/theme-sample-06.png" alt="主题示例 6" width="220" /></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/theme-sample-07.png" alt="主题示例 7" width="220" /></td>
-    <td></td>
-    <td></td>
-  </tr>
-</table>
-
 ## 使用方式
 
 1. 在左侧 **内容编辑** 中填写标题和正文。
@@ -76,49 +56,6 @@
 4. 切换到 **视觉样式**，选择主题并调整字体、字号、行距、页脚等参数。
 5. 常用配置可以保存到 **我的预设**。
 6. 点击 **下载 ZIP** 一次导出全部卡片，或在单张预览下方单独下载。
-
-## 本地运行
-
-### 环境要求
-
-- Node.js 20 或更高版本
-- npm
-
-### 安装
-
-```bash
-git clone https://github.com/yingjinghuang/xhs-poster.git
-cd xhs-poster
-npm install
-```
-
-### 启动开发环境
-
-```bash
-npm run dev
-```
-
-默认访问：
-
-```text
-http://localhost:3000
-```
-
-### 构建生产版本
-
-```bash
-npm run build
-npm run start
-```
-
-## 常用命令
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动本地开发服务器 |
-| `npm run build` | 执行生产构建和 TypeScript 检查 |
-| `npm run start` | 启动已构建的生产版本 |
-| `npm test` | 运行项目的静态行为回归检查 |
 
 ## 项目结构
 
