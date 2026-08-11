@@ -228,3 +228,24 @@ assert.match(pageSource, /<label htmlFor="highlight-style">高亮样式<\/label>
 assert.match(readmeSource, /分割线 `---`/, "README should document markdown divider syntax");
 assert.match(pageSource, /LEGACY_DEFAULT_CONTENT_PATTERNS/, "legacy default content patterns should be defined");
 assert.match(pageSource, /setContent\(\(current\) => \(isLegacyDefaultContent\(current\) \? DEFAULT_CONTENT : current\)\)/, "legacy default content should be migrated without overwriting custom content");
+
+// Curated + custom theme system
+assert.match(pageSource, /const EXTRA_THEME_PRESET_ORDER = \[[\s\S]*?"cream-coffee"[\s\S]*?"glacier-blue"[\s\S]*?"wine-gray"[\s\S]*?"lavender-mist"[\s\S]*?"cherry-cream"[\s\S]*?"ink-rice-paper"/, "six additional curated theme presets should be registered");
+assert.match(pageSource, /id:\s*"cream-coffee"/, "cream coffee theme should be available");
+assert.match(pageSource, /id:\s*"glacier-blue"/, "glacier blue theme should be available");
+assert.match(pageSource, /id:\s*"wine-gray"/, "wine gray theme should be available");
+assert.match(pageSource, /id:\s*"lavender-mist"/, "lavender mist theme should be available");
+assert.match(pageSource, /id:\s*"cherry-cream"/, "cherry cream theme should be available");
+assert.match(pageSource, /id:\s*"ink-rice-paper"/, "ink rice paper theme should be available");
+assert.match(pageSource, /const CUSTOM_THEME_ID = "custom";/, "custom theme should have a stable id");
+assert.match(pageSource, /const CUSTOM_PALETTE_FIELDS/, "custom theme should expose a bounded set of meaningful color controls");
+assert.match(pageSource, /function buildCustomTheme/, "custom colors should reuse an existing structural theme");
+assert.match(pageSource, /function getContrastRatio/, "custom colors should include a readability contrast check");
+assert.match(pageSource, /复制当前主题并自定义/, "users should be able to fork a built-in palette into a custom theme");
+assert.match(pageSource, /type="color"/, "custom theme editor should provide native color pickers");
+assert.match(pageSource, /customThemeBaseId,[\s\S]*?customPalette/, "custom colors should be included in local workspace persistence");
+assert.match(pageSource, /preset\.themeId === CUSTOM_THEME_ID/, "saved presets should restore custom colors");
+assert.match(cssSource, /\.custom-theme-editor/, "custom theme editor should have dedicated UI styling");
+assert.match(readmeSource, /14 套内置主题/, "README should document the expanded built-in theme library");
+assert.match(readmeSource, /## 自定义配色/, "README should document custom palette editing");
+
