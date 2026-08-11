@@ -2,8 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "LuKK XHS Poster Studio",
-  description: "小红书长文卡片排版工具，把 Markdown 长文自动拆成可发布 PNG 卡片。"
+  title: "XHS Poster｜小红书长文卡片排版工具",
+  description: "将 Markdown 长文自动分页、排版并导出为可发布的 3:4 PNG 小红书卡片。"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
