@@ -74,6 +74,12 @@ function makeCentralHeader(nameBytes: Uint8Array, data: Uint8Array, crc: number,
   return header;
 }
 
+function toArrayBuffer(data: Uint8Array) {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy.buffer;
+}
+
 export function createStoredZip(entries: ZipEntry[]) {
   const encoder = new TextEncoder();
   const now = new Date();
@@ -104,7 +110,8 @@ export function createStoredZip(entries: ZipEntry[]) {
   endView.setUint32(16, localOffset, true);
   endView.setUint16(20, 0, true);
 
-  return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+  const parts = [...localParts, ...centralParts, end].map(toArrayBuffer);
+  return new Blob(parts, { type: "application/zip" });
 }
 
 export function dataUrlToBytes(dataUrl: string) {
