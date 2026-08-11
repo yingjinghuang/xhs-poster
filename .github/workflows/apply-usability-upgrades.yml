@@ -1,0 +1,45 @@
+name: Apply usability upgrades
+
+on:
+  push:
+    branches: ["agent/usability-upgrades"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: agent/usability-upgrades
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply source patches
+        run: node scripts/apply-usability-upgrades.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Commit validated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/apply-usability-upgrades.mjs .github/workflows/apply-usability-upgrades.yml
+          git add app/page.tsx app/globals.css README.md app/zip.ts
+          git commit -m "Improve poster editing workflow"
+          git push origin HEAD:agent/usability-upgrades
