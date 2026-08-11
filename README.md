@@ -10,10 +10,6 @@
 
 打开网页后即可直接使用，无需安装。
 
-## 界面预览
-
-![XHS Poster 内容编辑界面](docs/images/lukk-xhs-content-editor.png)
-
 ## 导出示例
 
 <table>
@@ -133,10 +129,10 @@ xhs-poster/
 │   ├── page.tsx         # 编辑器、分页、预览与导出逻辑
 │   ├── globals.css      # 界面样式
 │   └── zip.ts           # 浏览器端 ZIP 生成
-├── docs/images/         # README 截图与主题示例
+├── docs/images/         # README 示例图片
 ├── scripts/             # 回归检查脚本
-├── public/              # 静态资源
-└── package.json
+├── package.json
+└── next.config.mjs
 ```
 
 ## 本地数据与隐私
